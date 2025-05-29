@@ -1,0 +1,235 @@
+body {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+    padding: 20px 0;
+}
+
+.container {
+    max-width: 1200px;
+}
+
+/* Auth Forms */
+.auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 80vh;
+}
+
+.auth-box {
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    max-width: 400px;
+}
+
+/* Notes App */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* Search and Filter */
+.search-filter {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+}
+
+/* Category Management */
+.category-management {
+    display: flex;
+    gap: 10px;
+}
+
+.category-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 0.875rem;
+    color: white;
+    margin: 2px;
+}
+
+/* Create Note */
+.create-note {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+    margin-bottom: 30px;
+}
+
+/* Note Cards */
+.note-card {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s;
+    border-left: 4px solid transparent;
+}
+
+.note-card:hover {
+    transform: translateY(-5px);
+}
+
+.note-card.pinned {
+    border-left-color: #ffc107;
+}
+
+.note-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #212529;
+}
+
+.note-content {
+    color: #6c757d;
+    margin-bottom: 15px;
+    white-space: pre-wrap;
+}
+
+.note-content.markdown {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.note-content.html {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.note-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.note-category {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: white;
+}
+
+.note-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.note-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    background: #e9ecef;
+    color: #495057;
+}
+
+.note-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.note-date {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.note-file {
+    margin-top: 10px;
+    padding: 5px 10px;
+    background: #e9ecef;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    text-decoration: none;
+    color: #495057;
+}
+
+.note-file:hover {
+    background: #dee2e6;
+    color: #212529;
+}
+
+/* Rich Text Editor */
+.EasyMDEContainer {
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.editor-toolbar {
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+}
+
+.CodeMirror {
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+
+/* Category Modal */
+#categoriesList {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.category-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 5px;
+    background: #f8f9fa;
+}
+
+.category-item:hover {
+    background: #e9ecef;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+    }
+
+    .search-filter .row > div {
+        margin-bottom: 10px;
+    }
+
+    .note-actions {
+        flex-direction: column;
+    }
+
+    .note-actions .btn {
+        width: 100%;
+    }
+} 
