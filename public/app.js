@@ -1,7 +1,7 @@
 // API endpoints
-const API_URL = process.env.NODE_ENV === 'production'
-    ? 'https://your-app-name.onrender.com/api'
-    : 'http://localhost:3001/api';
+const API_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3001/api'
+    : 'https://your-app-name.onrender.com/api';
 
 // DOM Elements
 const authForms = document.getElementById('auth-forms');
@@ -288,6 +288,96 @@ async function exportNote(format) {
     }
 }
 
+// Download functions
+async function downloadNote(format) {
+    const noteId = document.getElementById('editNoteId').value;
+    if (!noteId) {
+        alert('Please select a note to download');
+        return;
+    }
+    await downloadNoteDirect(noteId, format);
+}
+
+async function downloadNoteWithAttachment() {
+    const noteId = document.getElementById('editNoteId').value;
+    if (!noteId) {
+        alert('Please select a note to download');
+        return;
+    }
+    await downloadNoteWithAttachment(noteId);
+}
+
+async function downloadNoteDirect(noteId, format) {
+    try {
+        const response = await fetch(`${API_URL}/notes/${noteId}/export/${format}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) throw new Error('Failed to download note');
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `note-${noteId}.${format}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function downloadNoteWithAttachmentDirect(noteId) {
+    try {
+        const response = await fetch(`${API_URL}/notes/${noteId}/download-with-attachment`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) throw new Error('Failed to download note with attachment');
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `note-${noteId}-with-attachment.zip`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
+async function downloadNoteCard(noteId) {
+    try {
+        // First get the note details to check if it has an attachment
+        const noteResponse = await fetch(`${API_URL}/notes/${noteId}`, {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!noteResponse.ok) throw new Error('Failed to fetch note details');
+        const note = await noteResponse.json();
+
+        // If note has attachment, offer both options
+        if (note.attachment_path) {
+            const choice = confirm('This note has an attachment. Would you like to download with attachment? Click OK for with attachment, Cancel for note only.');
+            if (choice) {
+                await downloadNoteWithAttachmentDirect(noteId);
+            } else {
+                await downloadNoteDirect(noteId, 'txt');
+            }
+        } else {
+            // No attachment, just download the note
+            await downloadNoteDirect(noteId, 'txt');
+        }
+    } catch (error) {
+        alert(error.message);
+    }
+}
+
 function handleLogout() {
     authToken = null;
     currentUser = null;
@@ -465,6 +555,9 @@ function createNoteElement(note) {
                 <button class="btn btn-sm btn-primary" onclick="openEditModal(${note.id})">
                     <i class="bi bi-pencil"></i> Edit
                 </button>
+                <button class="btn btn-sm btn-success" onclick="downloadNoteCard(${note.id})">
+                    <i class="bi bi-download"></i> Download
+                </button>
                 <button class="btn btn-sm btn-danger" onclick="handleDeleteNote(${note.id})">
                     <i class="bi bi-trash"></i> Delete
                 </button>
@@ -565,62 +658,6 @@ function connectWebSocket(noteId) {
             }
         }, 5000);
     };
-}
-
-// Share functionality
-function shareNote(type) {
-    const noteId = document.getElementById('editNoteId').value;
-    document.getElementById('shareNoteId').value = noteId;
-    document.getElementById('shareWithUserGroup').style.display = type === 'private' ? 'block' : 'none';
-    document.getElementById('shareSettingsModal').classList.add('show');
-}
-
-function showShareSettings() {
-    const noteId = document.getElementById('editNoteId').value;
-    document.getElementById('shareNoteId').value = noteId;
-    document.getElementById('shareWithUserGroup').style.display = 'block';
-    document.getElementById('shareSettingsModal').classList.add('show');
-}
-
-async function createShareLink() {
-    const noteId = document.getElementById('shareNoteId').value;
-    const canEdit = document.getElementById('shareCanEdit').checked;
-    const expiresIn = document.getElementById('shareExpiration').value;
-    const sharedWithEmail = document.getElementById('shareWithEmail').value;
-
-    try {
-        const response = await fetch(`/api/notes/${noteId}/share`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token')}`
-            },
-            body: JSON.stringify({
-                isPublic: !sharedWithEmail,
-                canEdit,
-                sharedWithEmail: sharedWithEmail || null,
-                expiresIn: expiresIn ? parseInt(expiresIn) : null
-            })
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-            document.getElementById('shareLink').value = data.shareUrl;
-            document.getElementById('shareLinkContainer').classList.remove('d-none');
-        } else {
-            alert(data.error || 'Failed to create share link');
-        }
-    } catch (error) {
-        console.error('Error creating share link:', error);
-        alert('Failed to create share link');
-    }
-}
-
-function copyShareLink() {
-    const shareLink = document.getElementById('shareLink');
-    shareLink.select();
-    document.execCommand('copy');
-    alert('Share link copied to clipboard!');
 }
 
 // Version history

@@ -11,7 +11,7 @@ const marked = require('marked');
 const PDFDocument = require('pdfkit');
 const sanitizeHtml = require('sanitize-html');
 const WebSocket = require('ws');
-const crypto = require('crypto');
+const JSZip = require('jszip');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -97,11 +97,39 @@ async function saveNoteVersion(noteId, userId, content) {
 
 // Middleware
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' 
-        ? ['https://your-app-name.onrender.com', 'http://localhost:3001']
-        : 'http://localhost:3001',
-    credentials: true
+    origin: function(origin, callback) {
+        // Allow requests with no origin (like mobile apps, curl, etc)
+        if (!origin) return callback(null, true);
+        
+        const allowedOrigins = [
+            'http://localhost:3001',
+            'http://127.0.0.1:3001',
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            // Add your production domain here
+            'https://your-app-name.onrender.com'
+        ];
+        
+        if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+            callback(null, true);
+        } else {
+            console.log('Blocked by CORS:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
+
+// Add security headers
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    next();
+});
+
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -123,24 +151,6 @@ db.connect((err) => {
     }
     console.log('Connected to MySQL database');
 
-    // Create sharing table if not exists
-    db.query(`
-        CREATE TABLE IF NOT EXISTS note_shares (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            note_id INT NOT NULL,
-            owner_id INT NOT NULL,
-            shared_with_id INT,
-            share_token VARCHAR(255) UNIQUE,
-            is_public BOOLEAN DEFAULT FALSE,
-            can_edit BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMP NULL,
-            FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
-            FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (shared_with_id) REFERENCES users(id) ON DELETE SET NULL
-        )
-    `);
-
     // Create version history table if not exists
     db.query(`
         CREATE TABLE IF NOT EXISTS note_versions (
@@ -153,6 +163,20 @@ db.connect((err) => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    `);
+
+    // Create note attachments table if not exists
+    db.query(`
+        CREATE TABLE IF NOT EXISTS note_attachments (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            note_id INT NOT NULL,
+            file_name VARCHAR(255) NOT NULL,
+            file_path VARCHAR(255) NOT NULL,
+            file_type VARCHAR(100),
+            file_size INT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
         )
     `);
 });
@@ -422,6 +446,61 @@ app.get('/api/notes/:id/download', authenticateToken, (req, res) => {
     });
 });
 
+// Download note with attachment as ZIP
+app.get('/api/notes/:id/download-with-attachment', authenticateToken, (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const query = 'SELECT * FROM notes WHERE id = ? AND user_id = ?';
+    db.query(query, [id, userId], (err, results) => {
+        if (err) {
+            console.error('Error fetching note:', err);
+            return res.status(500).json({ error: 'Error fetching note' });
+        }
+        if (results.length === 0) {
+            return res.status(404).json({ error: 'Note not found' });
+        }
+
+        const note = results[0];
+        const zip = new JSZip();
+
+        // Add note content to ZIP
+        let content = note.content;
+        switch (note.content_format) {
+            case 'markdown':
+                content = `# ${note.title}\n\n${content}`;
+                break;
+            case 'html':
+                content = `<!DOCTYPE html><html><head><title>${note.title}</title></head><body><h1>${note.title}</h1>${content}</body></html>`;
+                break;
+            default:
+                content = `${note.title}\n\n${content}`;
+        }
+
+        // Add note content file
+        const fileExtension = note.content_format === 'markdown' ? 'md' : 
+                             note.content_format === 'html' ? 'html' : 'txt';
+        zip.file(`note-${id}.${fileExtension}`, content);
+
+        // Add attachment if it exists
+        if (note.attachment_path && require('fs').existsSync(note.attachment_path)) {
+            const attachmentData = require('fs').readFileSync(note.attachment_path);
+            const attachmentName = require('path').basename(note.attachment_path);
+            zip.file(`attachment-${attachmentName}`, attachmentData);
+        }
+
+        // Generate and send ZIP
+        zip.generateAsync({ type: 'nodebuffer' }).then(buffer => {
+            res.setHeader('Content-Type', 'application/zip');
+            res.setHeader('Content-Disposition', `attachment; filename=note-${id}-with-attachment.zip`);
+            res.send(buffer);
+        }).catch(err => {
+            console.error('Error creating ZIP:', err);
+            res.status(500).json({ error: 'Error creating download package' });
+        });
+    });
+});
+
 // Category endpoints
 app.post('/api/categories', authenticateToken, (req, res) => {
     const { name, color } = req.body;
@@ -545,149 +624,28 @@ app.get('/api/notes/:id/export/:format', authenticateToken, (req, res) => {
     });
 });
 
-// Share note endpoints
-app.post('/api/notes/:id/share', authenticateToken, (req, res) => {
-    const { id } = req.params;
-    const userId = req.user.id;
-    const { isPublic, canEdit, sharedWithEmail, expiresIn } = req.body;
-
-    // Generate share token
-    const shareToken = crypto.randomBytes(32).toString('hex');
-
-    // Calculate expiration if provided
-    const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000) : null;
-
-    // First check if the note belongs to the user
-    db.query('SELECT id FROM notes WHERE id = ? AND user_id = ?', [id, userId], async (err, results) => {
-        if (err || results.length === 0) {
-            return res.status(404).json({ error: 'Note not found' });
-        }
-
-        let sharedWithId = null;
-        if (sharedWithEmail) {
-            // Get user ID from email
-            const [user] = await db.promise().query('SELECT id FROM users WHERE email = ?', [sharedWithEmail]);
-            if (user.length > 0) {
-                sharedWithId = user[0].id;
-            }
-        }
-
-        const query = `
-            INSERT INTO note_shares 
-            (note_id, owner_id, shared_with_id, share_token, is_public, can_edit, expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `;
-
-        db.query(query, [id, userId, sharedWithId, shareToken, isPublic, canEdit, expiresAt], (err, results) => {
-            if (err) {
-                console.error('Error sharing note:', err);
-                return res.status(500).json({ error: 'Error sharing note' });
-            }
-            res.json({
-                shareToken,
-                shareUrl: process.env.NODE_ENV === 'production'
-                    ? `https://your-app-name.onrender.com/shared/${shareToken}`
-                    : `${req.protocol}://${req.get('host')}/shared/${shareToken}`
-            });
-        });
-    });
-});
-
-// Get shared note
-app.get('/api/shared/:token', (req, res) => {
-    const { token } = req.params;
-
-    const query = `
-        SELECT n.*, ns.can_edit, ns.expires_at, u.username as owner_name
-        FROM note_shares ns
-        JOIN notes n ON ns.note_id = n.id
-        JOIN users u ON ns.owner_id = u.id
-        WHERE ns.share_token = ? AND (ns.expires_at IS NULL OR ns.expires_at > NOW())
-    `;
-
-    db.query(query, [token], (err, results) => {
-        if (err || results.length === 0) {
-            return res.status(404).json({ error: 'Shared note not found or expired' });
-        }
-        res.json(results[0]);
-    });
-});
-
-// Get note versions
-app.get('/api/notes/:id/versions', authenticateToken, (req, res) => {
-    const { id } = req.params;
-    const userId = req.user.id;
-
-    // Check if user has access to the note
-    db.query('SELECT id FROM notes WHERE id = ? AND user_id = ?', [id, userId], (err, results) => {
-        if (err || results.length === 0) {
-            return res.status(404).json({ error: 'Note not found' });
-        }
-
-        const query = `
-            SELECT v.*, u.username
-            FROM note_versions v
-            JOIN users u ON v.user_id = u.id
-            WHERE v.note_id = ?
-            ORDER BY v.created_at DESC
-        `;
-
-        db.query(query, [id], (err, versions) => {
-            if (err) {
-                return res.status(500).json({ error: 'Error fetching versions' });
-            }
-            res.json(versions);
-        });
-    });
-});
-
-// Restore note version
-app.post('/api/notes/:id/restore/:versionId', authenticateToken, (req, res) => {
-    const { id, versionId } = req.params;
-    const userId = req.user.id;
-
-    // Check if user has access to the note
-    db.query('SELECT id FROM notes WHERE id = ? AND user_id = ?', [id, userId], async (err, results) => {
-        if (err || results.length === 0) {
-            return res.status(404).json({ error: 'Note not found' });
-        }
-
-        // Get version data
-        const [version] = await db.promise().query(
-            'SELECT * FROM note_versions WHERE id = ? AND note_id = ?',
-            [versionId, id]
-        );
-
-        if (version.length === 0) {
-            return res.status(404).json({ error: 'Version not found' });
-        }
-
-        // Update note with version data
-        const updateQuery = `
-            UPDATE notes 
-            SET title = ?, content = ?, content_format = ?
-            WHERE id = ? AND user_id = ?
-        `;
-
-        db.query(updateQuery, [
-            version[0].title,
-            version[0].content,
-            version[0].content_format,
-            id,
-            userId
-        ], (err, results) => {
-            if (err) {
-                return res.status(500).json({ error: 'Error restoring version' });
-            }
-            res.json({ message: 'Version restored successfully' });
-        });
-    });
-});
-
-// Modify the server startup to handle WebSocket upgrades
-const server = app.listen(port, () => {
+// Modify the server startup to listen on all network interfaces
+const server = app.listen(port, '0.0.0.0', () => {
     console.log(`Server running on port ${port}`);
+    console.log('Server is accessible at:');
+    console.log(`- Local: http://localhost:${port}`);
+    console.log(`- Network: http://${getLocalIP()}:${port}`);
 });
+
+// Helper function to get local IP address
+function getLocalIP() {
+    const { networkInterfaces } = require('os');
+    const nets = networkInterfaces();
+    for (const name of Object.keys(nets)) {
+        for (const net of nets[name]) {
+            // Skip over non-IPv4 and internal (i.e. 127.0.0.1) addresses
+            if (net.family === 'IPv4' && !net.internal) {
+                return net.address;
+            }
+        }
+    }
+    return 'localhost';
+}
 
 server.on('upgrade', (request, socket, head) => {
     // Verify JWT token from query string
