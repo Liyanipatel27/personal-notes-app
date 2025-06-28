@@ -82,44 +82,13 @@ MIT
 
 ## Deployment Instructions
 
-### 1. Create a Render.com Account
-1. Go to [Render.com](https://render.com)
-2. Sign up for a free account
-3. Verify your email
-
-### 2. Create a Database
-1. In Render dashboard, click "New +"
-2. Select "PostgreSQL"
-3. Choose "Free" plan
-4. Name your database (e.g., "notes-app-db")
-5. Save the database URL and credentials
-
-### 3. Deploy the Application
-1. In Render dashboard, click "New +"
-2. Select "Web Service"
-3. Connect your GitHub repository
-4. Configure the service:
-   - Name: notes-app (or your preferred name)
-   - Environment: Node
-   - Build Command: `npm install`
-   - Start Command: `node server.js`
-   - Plan: Free
-
-### 4. Set Environment Variables
-In the Render dashboard, add these environment variables:
-```
+###  Set Environment Variables
 NODE_ENV=production
-DB_HOST=your_database_host
-DB_USER=your_database_user
-DB_PASSWORD=your_database_password
-DB_NAME=your_database_name
-JWT_SECRET=your_secret_key
-```
-
-### 5. Update Application URL
-After deployment, update these files with your Render URL:
-1. `server.js`: Replace `your-app-name.onrender.com` with your actual Render URL
-2. `public/app.js`: Replace `your-app-name.onrender.com` with your actual Render URL
+DB_HOST=your_mysql_host
+DB_USER=your_mysql_username
+DB_PASSWORD=your_mysql_password
+DB_NAME=your_mysql_database
+JWT_SECRET=your_jwt_secret_key
 
 ## Local Development
 1. Clone the repository
