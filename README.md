@@ -14,22 +14,6 @@ A simple, modern notes application with authentication, categories, file attachm
 
 ---
 
-## Screenshots
-
-### 1. Login / Register
-![Login/Register](screenshots/login.png)
-
-### 2. Create Note
-![Create Note](screenshots/create_note.png)
-
-### 3. Notes List & Actions
-![Notes List](screenshots/notes_list.png)
-
-### 4. Download Options
-![Download Options](screenshots/download_options.png)
-
----
-
 ## App Flow
 
 ```mermaid
